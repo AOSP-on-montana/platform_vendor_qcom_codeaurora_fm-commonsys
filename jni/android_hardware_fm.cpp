@@ -573,12 +573,8 @@ static jint android_hardware_fmradio_FmReceiverJNI_acquireFdNative
         (JNIEnv* env, jobject thiz __unused, jstring path)
 {
     int fd;
-    int i = 0, err;
     char value[PROPERTY_VALUE_MAX] = {'\0'};
-    char versionStr[40] = {'\0'};
-    int init_success = 0;
     jboolean isCopy;
-    v4l2_capability cap;
     const char* radio_path = env->GetStringUTFChars(path, &isCopy);
     if(radio_path == NULL){
         return FM_JNI_FAILURE;
@@ -590,20 +586,6 @@ static jint android_hardware_fmradio_FmReceiverJNI_acquireFdNative
     if(fd < 0){
         return FM_JNI_FAILURE;
     }
-    //Read the driver verions
-    err = ioctl(fd, VIDIOC_QUERYCAP, &cap);
-
-    ALOGD("VIDIOC_QUERYCAP returns :%d: version: %d \n", err , cap.version );
-
-    if( err >= 0 ) {
-       ALOGD("Driver Version(Same as ChipId): %x \n",  cap.version );
-       /*Conver the integer to string */
-       snprintf(versionStr, sizeof(versionStr), "%d", cap.version);
-       property_set("vendor.hw.fm.version", versionStr);
-    } else {
-       close(fd);
-       return FM_JNI_FAILURE;
-    }
 
     property_get("vendor.qcom.bluetooth.soc", value, NULL);
 
@@ -611,28 +593,8 @@ static jint android_hardware_fmradio_FmReceiverJNI_acquireFdNative
 
     if ((strcmp(value, "rome") != 0) && (strcmp(value, "hastings") != 0))
     {
-       /*Set the mode for soc downloader*/
-       property_set("vendor.hw.fm.mode", "normal");
-       /* Need to clear the hw.fm.init firstly */
-       property_set("vendor.hw.fm.init", "0");
-       property_set("ctl.start", "vendor.fm");
-       sched_yield();
-       for(i=0; i<45; i++) {
-         property_get("vendor.hw.fm.init", value, NULL);
-         if (strcmp(value, "1") == 0) {
-            init_success = 1;
-            break;
-         } else {
-            usleep(WAIT_TIMEOUT);
-         }
-       }
-       ALOGE("init_success:%d after %f seconds \n", init_success, 0.2*i);
-       if(!init_success) {
-         property_set("ctl.stop", "vendor.fm");
-         // close the fd(power down)
-         close(fd);
-         return FM_JNI_FAILURE;
-       }
+       property_set("hw.fm.init", "1");
+       usleep(WAIT_TIMEOUT);
     }
     return fd;
 }
@@ -649,7 +611,7 @@ static jint android_hardware_fmradio_FmReceiverJNI_closeFdNative
 
     if ((strcmp(value, "rome") != 0) && (strcmp(value, "hastings") != 0))
     {
-        property_set("ctl.stop", "vendor.fm");
+        property_set("hw.fm.init", "0");
     }
     close(fd);
     return FM_JNI_SUCCESS;
